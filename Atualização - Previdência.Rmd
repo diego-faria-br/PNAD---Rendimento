@@ -1,0 +1,52 @@
+---
+title: "Untitled"
+author: "Diego Oliveira Faria"
+date: "11/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(PNADcIBGE)
+library(survey)
+library(srvyr)
+library(tidyr)
+rm(list = ls())
+```
+
+## Carregando os Dadaos
+
+Primeiramente é necessário carregar os dados salvos. 
+
+```{r Carregando_Dados}
+  dados_srvyr<-as_survey(pnadc_design(read_pnadc("./data/PNADC_2019_visita5.txt","./data/input_PNADC_2019_visita5.txt",vars=c(
+    'V1022', #Situação do Domicilio Urb/Rural
+    'V2005', #Condicao no Domicilio
+    'V2007',#Sexo
+    'V2009',#Idade
+    'V4010', #Codigo da Ocupação
+    'VD4002',#Pessoa Ocupada/Não ocupada
+    'VD4009',#Posição na ocupação (carteira/sem carteira/func. publico)
+    'VD4010',#Grupamento de atividades
+    'VD4012',#Contribuição para a previdência
+    'VD4019'))))
+```
+
+## Criando Novas Variáveis
+
+
+
+```{r}
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

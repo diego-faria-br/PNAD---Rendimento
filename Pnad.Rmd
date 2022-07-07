@@ -1,0 +1,170 @@
+---
+title: "Análise: Renda e Programas Sociais"
+author: "Diego Oliveira Faria"
+date: "11/9/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,warning = FALSE)
+
+```
+
+
+```{r Bibliotecas}
+library(PNADcIBGE)
+library(survey)
+library(srvyr)
+library(kableExtra)
+library(tidyverse)
+library(kableExtra)
+rm(list = ls())
+
+```
+
+## Carregamento dos Dados
+
+A biblioteca PNADc possibilita baixar os dados online, mas preferimos o método que constrói a pesquisa a partir dos dados salvos na máquina. Por ser muito mais rápido.
+
+```{r dados}
+
+  
+dados_srvyr<-as_survey(pnadc_design(read_pnadc("./data/PNADC_2019_visita1.txt","./data/input_PNADC_2019_visita1_20200826.txt")))
+
+```
+
+## Quantis por Renda-Percapita
+
+A variável `VD5011` armazena a informação sobre o rendimento per-capita da residência de acordo com o dicionário de dados \emph{Rendimento (efetivo) domiciliar (exclusive rendimentos em cartão/tíquete transporte ou alimentação) (exclusive o rendimento das pessoas cuja condição na unidade domiciliar era pensionista, empregado doméstico ou parente do empregado doméstico)}.
+
+A tabela a seguir mostra o resultado do cálculo das renda referente a cada decil.
+
+
+```{r Renda-Percapita}
+
+#a <- svyquantile(~VD5011, design = dados_srvyr, quantiles = seq(0, 1, by=0.25), method = "linear", ties="rounded")
+
+quant_aux<-dados_srvyr %>%
+  summarise(qt = survey_quantile(VD5011,quantiles =seq(.1, .9, by=.1),na.rm=T))
+
+quant_aux1<-quant_aux[1:(length(quant_aux)%/%2)] %>%  pivot_longer(cols = c(1:9), names_to = "Quantil", values_to = 'Per_Capita')
+
+quant_aux2<-quant_aux[(length(quant_aux)%/%2+1):length(quant_aux)] %>%  pivot_longer(cols = c(1:9), names_to = "Quantil", values_to = 'Per_Capita_SE') %>% mutate(Quantil = gsub("_se","",Quantil))
+
+quantiles <- full_join(quant_aux1,quant_aux2)
+
+quantiles %>% kbl() %>% kable_styling()
+
+```
+
+### Gráfico
+
+O gráfico a seguir mostra as mesmas informações da tabela. Isto é, o valor dos decis de renda e o intervalo de confiança.
+
+
+```{r Renda}
+p <- ggplot(data = quantiles,
+            mapping = aes(x = Quantil, y = Per_Capita,
+                          ymin = Per_Capita - 2*Per_Capita_SE,
+                          ymax = Per_Capita + 2*Per_Capita_SE)) +
+  geom_col(color='#18A558',fill='#A3EBB1')+
+  geom_text(aes(label = Per_Capita), vjust = 2)+
+  geom_errorbar(color = '#000C66')+
+  scale_color_brewer()+
+  labs(x='Quantil',y='Renda per Capita (R$)', title = "Perfil de Renda")+
+  theme_classic()
+
+p
+```
+O código a seguir cria uma coluna na pesquisa relativa à categorização por quantil de renda.
+
+```{r Quantis de Renda}
+
+
+dados_familias_quant <- update( dados_srvyr, qtile = factor(findInterval(VD5011,c(0,quantiles$Per_Capita))))
+
+
+dados_familias_quant %>% group_by(qtile) %>%  summarize(n = survey_total()) %>% kbl() %>% kable_styling() 
+```
+## BPC, Aposentadoria e Bolsa Família
+
+Agregação por família para saber se na residência tem alguém que seja aposentado, ou beneficiário de Bolsa Família ou BPC.
+
+```{r}
+  dados_familias_BPC_Aposentado <- dados_familias_quant %>% mutate(V5001A = as.character(V5001A),V5002A= as.character(V5002A),V5004A = as.character(V5004A)) %>% group_by(UPA,V1008,V1014) %>%
+    mutate(tem_bpc = as.integer(any(V5001A=="1",na.rm = T)),tem_bf = as.integer(any(V5002A=="1",na.rm = T)),tem_apos = as.integer(any(V5004A=="1",na.rm = T))) %>% ungroup()
+
+```
+
+
+### Bolsa Família
+
+```{r BFamilia}
+ tab_bf<- tab_bf<- dados_familias_BPC_Aposentado %>% group_by(qtile,tem_bf) %>% summarise(n = survey_total()) %>% mutate(Pop = sum(n), prop =n/Pop)
+ tab_bf%>% kbl() %>% kable_styling()
+
+```
+
+
+
+```{r BFPllot}
+bf <- ggplot(data = tab_bf,
+            mapping = aes(x = qtile, y = n,fill=as.factor(tem_bf))) +
+  geom_col()+
+  theme_light()+
+  labs(title='Proporção de beneficiários em cada quantil',x='Quantil',y='Pessoas',fill = "Condição")
+
+bf
+```
+
+### BPC - LOAS
+
+
+```{r BPC}
+ tab_bpc<- dados_familias_BPC_Aposentado %>% group_by(qtile,tem_bpc) %>% summarise(n = survey_total()) %>% mutate(Pop = sum(n), prop =n/Pop)
+
+ tab_bpc%>% kbl() %>% kable_styling()
+
+
+```
+```{r}
+ 
+dados_familias_BPC_Aposentado %>% group_by(tem_bpc) %>% summarise(n = survey_total()) %>% mutate(Pop = sum(n), prop =n/Pop)%>% kbl() %>% kable_styling()
+
+
+```
+
+
+```{r BPCPllot}
+bpc <- ggplot(data = tab_bpc,
+            mapping = aes(x = qtile, y = n,fill=as.factor(tem_bpc))) +
+  geom_col()+
+  labs(title='Proporção de beneficiários em cada quantil',x='Quantil',y='Pessoas',fill = "Condição")+
+  theme_light()
+
+
+bpc
+```
+
+### Aposentadoria
+
+
+```{r Aposentadoria}
+ tab_apos<- dados_familias_BPC_Aposentado %>% group_by(qtile,tem_apos) %>% summarise(n = survey_total()) %>% mutate(Pop = sum(n), prop =n/Pop)
+ tab_apos%>% kbl() %>% kable_styling()
+
+```
+
+
+```{r AposPlot}
+apos <- ggplot(data = tab_apos,
+            mapping = aes(x = qtile, y = n,fill=as.factor(tem_apos))) +
+  geom_col()+
+  labs(title='Proporção de beneficiários em cada quantil',x='Quantil',y='Pessoas',fill = "Condição")+
+  theme_light()
+
+apos
+```
